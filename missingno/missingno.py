@@ -9,6 +9,22 @@ from .utils import nullity_filter, nullity_sort
 import warnings
 
 
+def get_base_period(freq):
+    # Dictionary mapping frequency codes to their base periods
+    freq_map = {
+        'YS': 'Y',  # Year start
+        'YE': 'Y',  # Year end
+        'MS': 'M',  # Month start
+        'M': 'M',   # Monthly
+        'Q': 'M',   # Quarterly (maps to monthly for formatting)
+        'D': 'D',   # Daily
+        'W': 'D'    # Weekly (maps to daily for formatting)
+    }
+    
+    # Handle multiple characters (like '2YS')
+    base_freq = ''.join(filter(str.isalpha, freq))
+    return freq_map.get(base_freq, base_freq)
+
 def matrix(
     df, filter=None, n=0, p=0, sort=None, figsize=(25, 10), width_ratios=(15, 1),
     color=(0.25, 0.25, 0.25), fontsize=16, labels=None, label_rotation=45, sparkline=True,
@@ -90,32 +106,16 @@ def matrix(
 
     # Adds Timestamps ticks if freq is not None, else set up the two top-bottom row ticks.
     if freq:
+        datetime_freq = get_base_period(freq)
+        df = df.sort_index(ascending=True)
+        start_date = min(df.index)
+        end_date = max(df.index)
+        ts_array = pd.date_range(start_date, end_date, freq=freq).values
+        ts_ticks = ts_array.astype(f'datetime64[{datetime_freq}]').astype(str)        
+        index_as_str = df.index.values.astype(f'datetime64[{datetime_freq}]').astype(str)
         ts_list = []
-
-        if type(df.index) == pd.PeriodIndex:
-            ts_array = pd.date_range(df.index.to_timestamp().date[0],
-                                     df.index.to_timestamp().date[-1],
-                                     freq=freq).values
-
-            ts_ticks = pd.date_range(df.index.to_timestamp().date[0],
-                                     df.index.to_timestamp().date[-1],
-                                     freq=freq).map(lambda t:
-                                                    t.strftime('%Y-%m-%d'))
-
-        elif type(df.index) == pd.DatetimeIndex:
-            ts_array = pd.date_range(df.index[0], df.index[-1],
-                                     freq=freq).values
-
-            ts_ticks = pd.date_range(df.index[0], df.index[-1],
-                                     freq=freq).map(lambda t:
-                                                    t.strftime('%Y-%m-%d'))
-        else:
-            raise KeyError('Dataframe index must be PeriodIndex or DatetimeIndex.')
-        try:
-            for value in ts_array:
-                ts_list.append(df.index.get_loc(value))
-        except KeyError:
-            raise KeyError('Could not divide time index into desired frequency.')
+        for value in ts_ticks:
+            ts_list.append(int(np.where(index_as_str == str(value))[0][0]))
 
         ax0.set_yticks(ts_list)
         ax0.set_yticklabels(ts_ticks, fontsize=int(fontsize / 16 * 20), rotation=0)
